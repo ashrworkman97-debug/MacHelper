@@ -37,12 +37,10 @@ class FileWorkflowTests(unittest.TestCase):
         self.assertEqual(plan["status"], "pending")
         self.assertTrue(os.path.isfile(source), "planning must not move files")
         self.assertEqual(len(plan["operations"]), 1)
-
         journal = files.apply_plan(plan["id"])
         moved = os.path.join(self.root, "Images", "photo.jpg")
         self.assertTrue(os.path.isfile(moved))
         self.assertFalse(os.path.exists(source))
-
         restored = files.undo_journal(journal["id"])
         self.assertEqual(restored, 1)
         self.assertTrue(os.path.isfile(source))
@@ -86,6 +84,35 @@ class FileWorkflowTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(journal["entries"][0]["destination"]))
         self.assertEqual(files.undo_journal(journal["id"]), 1)
         self.assertTrue(os.path.isfile(source))
+
+    def test_partial_apply_records_undo_journal(self):
+        first = self.make_file("a.jpg", "first")
+        second = self.make_file("b.jpg", "second")
+        target_folder = os.path.join(self.root, "Images")
+        os.mkdir(target_folder)
+        conflict = os.path.join(target_folder, "b.jpg")
+        handle = open(conflict, "w")
+        handle.write("keep this")
+        handle.close()
+
+        plan = files.make_rule_plan(self.root)
+        try:
+            files.apply_plan(plan["id"])
+            self.fail("The conflicting destination should stop the apply.")
+        except RuntimeError as error:
+            marker = "machelper files undo "
+            self.assertIn(marker, str(error))
+            journal_id = str(error).split(marker, 1)[1].strip()
+
+        self.assertFalse(os.path.exists(first))
+        self.assertTrue(os.path.isfile(second))
+        self.assertEqual(files.undo_journal(journal_id), 1)
+        self.assertTrue(os.path.isfile(first))
+        handle = open(conflict, "r")
+        try:
+            self.assertEqual(handle.read(), "keep this")
+        finally:
+            handle.close()
 
 
 if __name__ == "__main__":
