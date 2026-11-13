@@ -143,30 +143,41 @@ def apply_plan(plan_id):
     journal = {"version": 1, "id": time.strftime("%Y%m%d-%H%M%S", time.localtime()) + "-" + uuid.uuid4().hex[:6],
                "created": iso_time(), "plan_id": plan_id, "entries": [], "undone": False}
     journal_path = os.path.join(state_dir("journals"), journal["id"] + ".json")
-    for item in plan.get("operations", []):
-        action, source = item.get("action"), absolute_path(item.get("source", ""))
-        if os.path.dirname(source) != root or not path_is_within(source, root):
-            raise ValueError("Plan source is outside its selected folder: %s" % source)
-        if not os.path.isfile(source) or os.path.islink(source):
-            raise ValueError("Source is missing or is not a regular file: %s" % source)
-        if action == "move":
-            destination = absolute_path(item.get("destination", ""))
-            parent = os.path.dirname(destination)
-            if os.path.dirname(parent) != root or not path_is_within(destination, root):
-                raise ValueError("Move destination must be one folder below the selected folder.")
-            if os.path.basename(destination) != os.path.basename(source):
-                raise ValueError("Renaming is not supported by this release.")
-            if os.path.lexists(parent) and (os.path.islink(parent) or not os.path.isdir(parent)):
-                raise ValueError("Destination folder is unsafe: %s" % parent)
-            if not os.path.isdir(parent):
-                os.mkdir(parent)
-        elif action == "trash":
-            destination = _unique_trash_path(os.path.basename(source))
-        else:
-            raise ValueError("Unsupported action in plan: %s" % action)
-        _move_without_overwrite(source, destination)
-        journal["entries"].append({"action": action, "source": source, "destination": destination})
-        save_json(journal_path, journal)
+    try:
+        for item in plan.get("operations", []):
+            action, source = item.get("action"), absolute_path(item.get("source", ""))
+            if os.path.dirname(source) != root or not path_is_within(source, root):
+                raise ValueError("Plan source is outside its selected folder: %s" % source)
+            if not os.path.isfile(source) or os.path.islink(source):
+                raise ValueError("Source is missing or is not a regular file: %s" % source)
+            if action == "move":
+                destination = absolute_path(item.get("destination", ""))
+                parent = os.path.dirname(destination)
+                if os.path.dirname(parent) != root or not path_is_within(destination, root):
+                    raise ValueError("Move destination must be one folder below the selected folder.")
+                if os.path.basename(destination) != os.path.basename(source):
+                    raise ValueError("Renaming is not supported by this release.")
+                if os.path.lexists(parent) and (os.path.islink(parent) or not os.path.isdir(parent)):
+                    raise ValueError("Destination folder is unsafe: %s" % parent)
+                if not os.path.isdir(parent):
+                    os.mkdir(parent)
+            elif action == "trash":
+                destination = _unique_trash_path(os.path.basename(source))
+            else:
+                raise ValueError("Unsupported action in plan: %s" % action)
+            _move_without_overwrite(source, destination)
+            journal["entries"].append({"action": action, "source": source,
+                                       "destination": destination, "restored": False})
+            save_json(journal_path, journal)
+    except Exception as error:
+        if journal["entries"]:
+            journal["partial"] = True
+            plan["status"], plan["journal_id"] = "partial", journal["id"]
+            save_json(journal_path, journal)
+            save_json(plan_path, plan)
+            raise RuntimeError("Stopped after %d operation(s): %s. Partial work can be undone with: machelper files undo %s" %
+                               (len(journal["entries"]), error, journal["id"]))
+        raise
     plan["status"], plan["journal_id"] = "applied", journal["id"]
     save_json(plan_path, plan)
     return journal
@@ -182,6 +193,8 @@ def undo_journal(journal_id):
         raise ValueError("This journal has already been undone.")
     restored = 0
     for entry in reversed(journal.get("entries", [])):
+        if entry.get("restored"):
+            continue
         source, destination = entry["source"], entry["destination"]
         if not os.path.lexists(destination):
             raise ValueError("Cannot restore; moved file is missing: %s" % destination)
@@ -190,6 +203,8 @@ def undo_journal(journal_id):
         if not os.path.isdir(os.path.dirname(source)):
             raise ValueError("Original folder no longer exists: %s" % os.path.dirname(source))
         _move_without_overwrite(destination, source)
+        entry["restored"] = True
+        save_json(path, journal)
         restored += 1
     journal["undone"], journal["undone_at"] = True, iso_time()
     save_json(path, journal)
