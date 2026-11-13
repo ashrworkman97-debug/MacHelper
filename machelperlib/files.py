@@ -1,7 +1,7 @@
 """Read-only scanning and approval-based file organization."""
 from __future__ import print_function
 import errno, os, shutil, stat, time, uuid
-from machelperlib.common import absolute_path, iso_time, path_is_within, read_json, save_json, state_dir
+from machelperlib.common import absolute_path, iso_time, path_is_within, read_json, save_json, state_dir, text_type
 
 CATEGORIES = {
     "Documents": set([".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".pages", ".xls", ".xlsx", ".csv", ".ppt", ".pptx", ".key"]),
@@ -77,7 +77,8 @@ def validate_ai_operations(root, operations):
         if source in seen_sources:
             raise ValueError("AI listed the same source more than once: %s" % source)
         seen_sources.add(source)
-        operation = {"action": action, "source": source, "reason": str(item.get("reason", "Suggested by AI."))[:500]}
+        operation = {"action": action, "source": source,
+                     "reason": text_type(item.get("reason", "Suggested by AI."))[:500]}
         if action == "move":
             destination = absolute_path(item.get("destination", ""))
             parent = os.path.dirname(destination)
