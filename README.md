@@ -62,9 +62,9 @@ Ask AI to propose a file organization plan:
 
     ./machelper ai organize ~/Downloads
 
-AI organization sends filenames, extensions, and file sizes to the configured endpoint. It does not upload file contents. Only point it at folders whose metadata you are comfortable sharing with that endpoint.
+AI organization sends each selected file's name, absolute path, extension, and size to the configured endpoint. It does not upload file contents. Only point it at folders whose filenames and paths you are comfortable sharing with that endpoint.
 
-For providers that require a bearer token, set MACHELPER_API_KEY in the environment. The key is not written to the MacHelper config file. OPENAI_API_KEY is also recognized.
+For providers that require a bearer token, set MACHELPER_API_KEY in the environment. The key is not written to the MacHelper config file. OPENAI_API_KEY is also recognized. Do not send a bearer token over an untrusted plain-HTTP network; use HTTPS or a trusted private network.
 
 ## Local model runtime
 
