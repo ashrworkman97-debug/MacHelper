@@ -1,6 +1,7 @@
-"""Read-only diagnostics for macOS application bundles."""
+"""Read-only diagnostics for macOS application bundles and crash reports."""
 from __future__ import print_function
-import os, subprocess
+import os, subprocess, time
+from machelperlib.common import path_is_within
 
 def _capture(arguments):
     try:
@@ -50,3 +51,56 @@ def inspect_app(path):
                    "", "[Gatekeeper assessment]", _capture(["/usr/sbin/spctl", "-a", "-vv", path]),
                    "", "MacHelper did not modify the application."])
     return "\n".join(result)
+
+def crash_report_dirs():
+    home = os.path.expanduser("~")
+    return [
+        os.path.join(home, "Library", "Logs", "DiagnosticReports"),
+        os.path.join(home, "Library", "Logs", "CrashReporter"),
+        "/Library/Logs/DiagnosticReports"
+    ]
+
+def list_crash_reports(app_name=None, limit=10):
+    matches = []
+    needle = (app_name or "").lower()
+    for folder in crash_report_dirs():
+        if not os.path.isdir(folder):
+            continue
+        for name in os.listdir(folder):
+            if not name.lower().endswith((".crash", ".ips")):
+                continue
+            if needle and needle not in name.lower():
+                continue
+            path = os.path.join(folder, name)
+            try:
+                info = os.lstat(path)
+            except OSError:
+                continue
+            if not os.path.isfile(path) or os.path.islink(path):
+                continue
+            matches.append({"path": path, "modified": info.st_mtime, "size": info.st_size})
+    matches.sort(key=lambda item: item["modified"], reverse=True)
+    return matches[:max(1, min(int(limit), 100))]
+
+def read_crash_report(path, max_lines=200):
+    path = os.path.abspath(os.path.expanduser(path))
+    allowed = False
+    for folder in crash_report_dirs():
+        if path_is_within(path, folder):
+            allowed = True
+            break
+    if not allowed or os.path.islink(path) or not os.path.isfile(path):
+        raise ValueError("Only regular crash reports in macOS diagnostic log folders can be read.")
+    output = []
+    handle = open(path, "r")
+    try:
+        for unused_index in range(max_lines):
+            line = handle.readline()
+            if not line:
+                break
+            output.append(line.rstrip("\r\n"))
+    finally:
+        handle.close()
+    if len(output) == max_lines:
+        output.append("[Output truncated after %d lines.]" % max_lines)
+    return "\n".join(output)
