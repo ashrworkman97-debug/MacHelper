@@ -1,6 +1,6 @@
 """Shared helpers. Compatible with the Python shipped by OS X Yosemite."""
 from __future__ import print_function
-import json, os, tempfile, time
+import json, os, sys, tempfile, time
 
 try:
     text_type = unicode
@@ -8,15 +8,17 @@ except NameError:
     text_type = str
 
 def out(value=""):
-    value = text_type(value)
-    try:
-        import sys
-        if sys.version_info[0] < 3:
-            sys.stdout.write(value.encode(getattr(sys.stdout, "encoding", None) or "utf-8", "replace") + "\n")
-        else:
+    if sys.version_info[0] < 3:
+        try:
+            if isinstance(value, text_type):
+                value = value.encode(getattr(sys.stdout, "encoding", None) or "utf-8", "replace")
+            else:
+                value = str(value)
             sys.stdout.write(value + "\n")
-    except Exception:
-        print(value)
+        except Exception:
+            sys.stdout.write(repr(value) + "\n")
+    else:
+        sys.stdout.write(str(value) + "\n")
 
 def state_dir(*parts):
     path = os.path.expanduser("~/.machelper")
@@ -62,8 +64,6 @@ def save_json(path, data):
             handle.flush()
         finally:
             handle.close()
-        if os.path.exists(path):
-            os.unlink(path)
         os.rename(temporary, path)
     except Exception:
         try:
