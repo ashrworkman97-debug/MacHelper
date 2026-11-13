@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run from a source checkout or the default installed layout.
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -f "$HERE/machelper.py" ]; then
+    APP="$HERE/machelper.py"
+else
+    APP="$HERE/../lib/machelper/machelper.py"
+fi
+exec /usr/bin/env python "$APP" "$@"
