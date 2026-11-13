@@ -3,7 +3,7 @@ from __future__ import print_function
 import os, platform, sys
 from machelperlib import __version__
 from machelperlib.common import out, human_size, load_config
-from machelperlib import ai, debug, files
+from machelperlib import ai, debug, files, runtime
 
 def _confirm(prompt):
     try:
@@ -54,8 +54,7 @@ def command_doctor(args):
         out("%s: %s" % (program, "available" if os.path.exists(program) else "not found"))
     try:
         stats = os.statvfs(os.path.expanduser("~"))
-        free = stats.f_bavail * stats.f_frsize
-        out("Free space on home volume: %s" % human_size(free))
+        out("Free space on home volume: %s" % human_size(stats.f_bavail * stats.f_frsize))
     except Exception:
         out("Free space: unavailable")
     cfg = load_config().get("ai", {})
@@ -86,8 +85,7 @@ def command_organize(args):
     _apply_with_prompt(files.make_rule_plan(args.folder), args.yes)
 
 def command_undo(args):
-    count = files.undo_journal(args.journal_id)
-    out("Restored %d file(s)." % count)
+    out("Restored %d file(s)." % files.undo_journal(args.journal_id))
 
 def command_ai_configure(args):
     ai.configure(args.url, args.model)
@@ -99,7 +97,7 @@ def command_ai_ask(args):
 def command_ai_models(args):
     models = ai.model_list()
     if not models:
-        out("The server did not report any models.")
+        out("The configured server did not report any models.")
         return
     for model in models:
         if isinstance(model, dict):
@@ -109,6 +107,37 @@ def command_ai_models(args):
 
 def command_ai_organize(args):
     _apply_with_prompt(ai.organize(args.folder), args.yes)
+
+def command_runtime_status(args):
+    running, models = runtime.status()
+    if not running:
+        out("No Ollama server is responding at http://127.0.0.1:11434.")
+        return
+    out("Ollama is running on this Mac.")
+    if models:
+        out("Installed models:")
+        for model in models:
+            out("  " + (model.get("name") or model.get("model") or str(model)))
+    else:
+        out("No models are installed yet.")
+
+def command_runtime_start(args):
+    out(runtime.start())
+
+def command_runtime_list(args):
+    code = runtime.command(["list"])
+    if code:
+        raise RuntimeError("ollama list exited with status %s." % code)
+
+def command_runtime_pull(args):
+    code = runtime.command(["pull", args.model])
+    if code:
+        raise RuntimeError("ollama pull exited with status %s." % code)
+
+def command_runtime_run(args):
+    code = runtime.command(["run", args.model])
+    if code:
+        raise RuntimeError("ollama run exited with status %s." % code)
 
 def command_debug_inspect(args):
     out(debug.inspect_app(args.application))
@@ -144,7 +173,7 @@ def build_parser():
     undo.add_argument("journal_id")
     undo.set_defaults(function=command_undo)
 
-    ai_parser = commands.add_parser("ai", help="Connect to a local or remote AI endpoint.")
+    ai_parser = commands.add_parser("ai", help="Connect to local or remote AI providers.")
     ai_commands = ai_parser.add_subparsers(dest="ai_command")
     configure = ai_commands.add_parser("configure", help="Set an OpenAI-compatible API endpoint.")
     configure.add_argument("--url", required=True, help="API base URL, e.g. http://127.0.0.1:11434/v1")
@@ -153,12 +182,27 @@ def build_parser():
     ask = ai_commands.add_parser("ask", help="Ask the configured AI a question.")
     ask.add_argument("question")
     ask.set_defaults(function=command_ai_ask)
-    models = ai_commands.add_parser("models", help="List models reported by the configured endpoint.")
+    models = ai_commands.add_parser("models", help="List models on the configured API endpoint.")
     models.set_defaults(function=command_ai_models)
     ai_organize = ai_commands.add_parser("organize", help="Ask AI for a file plan, then review it.")
     ai_organize.add_argument("folder")
     ai_organize.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     ai_organize.set_defaults(function=command_ai_organize)
+
+    runtime_parser = ai_commands.add_parser("runtime", help="Manage a local Ollama runtime.")
+    runtime_commands = runtime_parser.add_subparsers(dest="runtime_command")
+    status = runtime_commands.add_parser("status", help="Check the local Ollama server.")
+    status.set_defaults(function=command_runtime_status)
+    start = runtime_commands.add_parser("start", help="Start ollama serve in the background.")
+    start.set_defaults(function=command_runtime_start)
+    list_models = runtime_commands.add_parser("list", help="List models installed in local Ollama.")
+    list_models.set_defaults(function=command_runtime_list)
+    pull = runtime_commands.add_parser("pull", help="Download a model into local Ollama.")
+    pull.add_argument("model")
+    pull.set_defaults(function=command_runtime_pull)
+    run = runtime_commands.add_parser("run", help="Run a model interactively with Ollama.")
+    run.add_argument("model")
+    run.set_defaults(function=command_runtime_run)
 
     debug_parser = commands.add_parser("debug", help="Inspect macOS application bundles.")
     debug_commands = debug_parser.add_subparsers(dest="debug_command")
