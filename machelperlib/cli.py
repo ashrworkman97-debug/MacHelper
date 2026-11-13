@@ -1,6 +1,6 @@
 """Command-line interface for MacHelper."""
 from __future__ import print_function
-import os, platform, sys
+import os, platform, sys, time
 from machelperlib import __version__
 from machelperlib.common import out, human_size, load_config
 from machelperlib import ai, debug, files, runtime
@@ -142,6 +142,18 @@ def command_runtime_run(args):
 def command_debug_inspect(args):
     out(debug.inspect_app(args.application))
 
+def command_debug_crashes(args):
+    reports = debug.list_crash_reports(args.app, args.limit)
+    if not reports:
+        out("No matching crash reports were found.")
+        return
+    for report in reports:
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(report["modified"]))
+        out("%s  %8s  %s" % (stamp, human_size(report["size"]), report["path"]))
+
+def command_debug_crash(args):
+    out(debug.read_crash_report(args.report, args.lines))
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="machelper",
         description="A lightweight, terminal-first toolkit for macOS.")
@@ -204,11 +216,19 @@ def build_parser():
     run.add_argument("model")
     run.set_defaults(function=command_runtime_run)
 
-    debug_parser = commands.add_parser("debug", help="Inspect macOS application bundles.")
+    debug_parser = commands.add_parser("debug", help="Inspect macOS apps and crash reports.")
     debug_commands = debug_parser.add_subparsers(dest="debug_command")
     inspect = debug_commands.add_parser("inspect", help="Read bundle metadata and diagnostics.")
     inspect.add_argument("application")
     inspect.set_defaults(function=command_debug_inspect)
+    crashes = debug_commands.add_parser("crashes", help="List recent macOS crash reports.")
+    crashes.add_argument("--app", help="Filter report filenames by application name.")
+    crashes.add_argument("--limit", type=int, default=10)
+    crashes.set_defaults(function=command_debug_crashes)
+    crash = debug_commands.add_parser("crash", help="Read the start of one crash report.")
+    crash.add_argument("report")
+    crash.add_argument("--lines", type=int, default=200)
+    crash.set_defaults(function=command_debug_crash)
     return parser
 
 def main(argv=None):
