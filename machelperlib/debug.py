@@ -1,6 +1,6 @@
 """Read-only diagnostics for macOS application bundles and crash reports."""
 from __future__ import print_function
-import os, subprocess, time
+import os, subprocess, sys, time
 from machelperlib.common import path_is_within
 
 def _capture(arguments):
@@ -54,11 +54,9 @@ def inspect_app(path):
 
 def crash_report_dirs():
     home = os.path.expanduser("~")
-    return [
-        os.path.join(home, "Library", "Logs", "DiagnosticReports"),
-        os.path.join(home, "Library", "Logs", "CrashReporter"),
-        "/Library/Logs/DiagnosticReports"
-    ]
+    return [os.path.join(home, "Library", "Logs", "DiagnosticReports"),
+            os.path.join(home, "Library", "Logs", "CrashReporter"),
+            "/Library/Logs/DiagnosticReports"]
 
 def list_crash_reports(app_name=None, limit=10):
     matches = []
@@ -91,16 +89,23 @@ def read_crash_report(path, max_lines=200):
             break
     if not allowed or os.path.islink(path) or not os.path.isfile(path):
         raise ValueError("Only regular crash reports in macOS diagnostic log folders can be read.")
+    max_lines = max(1, min(int(max_lines), 1000))
     output = []
-    handle = open(path, "r")
+    handle = open(path, "rb")
     try:
         for unused_index in range(max_lines):
             line = handle.readline()
             if not line:
                 break
+            try:
+                line = line.decode("utf-8", "replace")
+            except AttributeError:
+                pass
             output.append(line.rstrip("\r\n"))
     finally:
         handle.close()
     if len(output) == max_lines:
         output.append("[Output truncated after %d lines.]" % max_lines)
+    if sys.version_info[0] < 3:
+        return u"\n".join(output)
     return "\n".join(output)
