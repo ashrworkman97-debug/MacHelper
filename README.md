@@ -10,7 +10,8 @@ The first release includes:
 - AI-generated organization plans through an OpenAI-compatible chat endpoint.
 - Explicit review before any move or Trash operation.
 - A local operation journal and an undo command.
-- Read-only inspection tools for macOS application bundles.
+- Read-only inspection of macOS application bundles and crash reports.
+- Optional local Ollama runtime controls.
 - Connections to local or remote model servers that expose an OpenAI-compatible API.
 
 Scanning, planning, and asking the AI do not change files. Every organization plan must be reviewed and explicitly applied. A Trash action moves a file to macOS Trash; it does not permanently erase it.
@@ -39,6 +40,10 @@ The plan command only creates a preview. The apply command asks for confirmation
 
     ./machelper files organize ~/Downloads
 
+After a successful apply, MacHelper prints an undo journal ID. Restore the original locations with:
+
+    ./machelper files undo JOURNAL_ID
+
 ## AI setup
 
 Configure an OpenAI-compatible endpoint:
@@ -61,13 +66,36 @@ AI organization sends filenames, extensions, and file sizes to the configured en
 
 For providers that require a bearer token, set MACHELPER_API_KEY in the environment. The key is not written to the MacHelper config file. OPENAI_API_KEY is also recognized.
 
+## Local model runtime
+
+If Ollama is installed and available in PATH on a capable Mac:
+
+    ./machelper ai runtime start
+    ./machelper ai runtime status
+    ./machelper ai runtime list
+    ./machelper ai runtime pull llama3.2:3b
+    ./machelper ai runtime run llama3.2:3b
+
+The runtime commands call the installed Ollama CLI; MacHelper does not bundle, install, or silently download a model runtime. Model downloads can be several gigabytes. The Yosemite Mac with 2 GB RAM is better used as a client for a model server running on a more powerful computer.
+
+To connect to a model server on another computer, configure its reachable API URL with ai configure. The server must expose an OpenAI-compatible API.
+
 ## Application debugging
 
 Inspect an application bundle without changing it:
 
     ./machelper debug inspect /Applications/Safari.app
 
-The debugger reports bundle metadata and, when available, executable format, linked libraries, code-signing details, and Gatekeeper assessment.
+List recent crash reports:
+
+    ./machelper debug crashes
+    ./machelper debug crashes --app Safari
+
+Read the start of a crash report:
+
+    ./machelper debug crash ~/Library/Logs/DiagnosticReports/REPORT.crash
+
+The debugger reports bundle metadata and, when available, executable format, linked libraries, code-signing details, and Gatekeeper assessment. Crash-report reading is limited to macOS diagnostic log folders and is read-only.
 
 ## Install
 
@@ -81,6 +109,12 @@ For a different prefix:
 
     PREFIX=/usr/local sh install.sh
 
+## Tests
+
+Run the standard-library test suite from the repository:
+
+    python -m unittest discover -s tests -v
+
 ## Safety model
 
 - Scan and plan operations are read-only.
@@ -89,12 +123,13 @@ For a different prefix:
 - Organization plans are constrained to the selected folder.
 - Existing destination files are never intentionally overwritten.
 - Trash means moving to ~/.Trash, not permanent deletion.
-- Each apply creates an undo journal. Undo refuses to overwrite an existing original file.
+- Each apply creates an undo journal. Partial applies are recorded and can be undone.
+- Undo refuses to overwrite an existing original file.
 - AI output is untrusted and validated before it becomes a plan.
 
 ## Project status
 
-MacHelper 0.1.0 is an early functional foundation. The command-line core comes first; a native graphical interface, extra debugging adapters, additional AI providers, and fuller model-management tools can build on it later without making the core depend on a heavyweight desktop framework.
+MacHelper 0.1.0 is an early functional foundation. The command-line core comes first; a native graphical interface, additional AI providers, more debugging adapters, and richer model-management tools can build on it later without making the core depend on a heavyweight desktop framework.
 
 ## License
 
